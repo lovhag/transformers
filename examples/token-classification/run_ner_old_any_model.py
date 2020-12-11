@@ -52,10 +52,13 @@ class ModelArguments:
     """
 
     model_class: str = field(
-        metadata={"help": "The class of the desired model. If 'BERT' you must also provide a 'model_name_or_path'."},
+        metadata={"help": "The class of the desired model. If 'BERT' you must also provide a 'model_name_or_path'"},
     )
     model_name_or_path: Optional[str] = field(
-        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+        metadata={"help": "Path to standard BERT pretrained model or model identifier from huggingface.co/models"}
+    )
+    custom_model_state_dict_path: Optional[str] = field(
+        default=None, metadata={"help": "Path to custom pretrained model state dict"}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -173,9 +176,9 @@ def main():
         num_labels=num_labels,
         id2label=label_map,
         label2id={label: i for i, label in enumerate(labels)},
-        max_seq_length=data_args.max_seq_length,
         cache_dir=model_args.cache_dir,
     )
+    config.max_seq_length = data_args.max_seq_length
 
     if model_args.model_class=="BERT":
         model = AutoModelForTokenClassification.from_pretrained(
@@ -187,8 +190,8 @@ def main():
         model_type = config.model_type
     else:
         model = MODEL_CLASS_DICT[model_args.model_class](config)
-        if model_args.model_name_or_path:
-            model.load_state_dict(torch.load(model_args.model_name_or_path))
+        if model_args.custom_model_state_dict_path:
+            model.load_state_dict(torch.load(model_args.custom_model_state_dict_path))
         model_type = "custom" #used for dataset tokens
         
     tokenizer = AutoTokenizer.from_pretrained(
@@ -306,7 +309,7 @@ def main():
         preds_list, _ = align_predictions(predictions, label_ids)
 
         output_test_results_file = os.path.join(training_args.output_dir, "test_results.txt")
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             with open(output_test_results_file, "w") as writer:
                 for key, value in metrics.items():
                     logger.info("  %s = %s", key, value)
@@ -314,7 +317,7 @@ def main():
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")
-        if trainer.is_world_master():
+        if trainer.is_world_process_zero():
             with open(output_test_predictions_file, "w") as writer:
                 with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
                     token_classification_task.write_predictions_to_file(writer, f, preds_list)
