@@ -26,6 +26,41 @@ def get_token_classifier_like_output(logits, attention_mask, labels, num_labels)
 # LSTM-CRF
 
 # simple LSTM
+class SimpleLSTM128(nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 128
+        self.rnn_size = 128
+        self.rnn_depth = 1
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.rnn = nn.LSTM(batch_first=True, input_size=self.embedding_dim, hidden_size=self.rnn_size, 
+                          bidirectional=True, num_layers=self.rnn_depth)
+
+        self.top_layer = nn.Linear(2*self.rnn_size, self.num_labels)
+              
+            
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids) #(n_seqs, max_len, emb_dim)
+                        
+        rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
+        output = self.top_layer(rnn_out)     
+        
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
 class SimpleLSTM(nn.Module):
     
     def __init__(self, config):
