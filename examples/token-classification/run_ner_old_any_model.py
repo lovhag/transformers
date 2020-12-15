@@ -41,7 +41,13 @@ from transformers.trainer_utils import is_main_process
 from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 import models_ner
 
-MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier}
+MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
+                    "SimpleCNN": models_ner.SimpleCNN,
+                    "SimpleCNNSoftmax": models_ner.SimpleCNNSoftmax,
+                    "MultipleWindowCNN": models_ner.MultipleWindowCNN,
+                    "MultipleWindowCNN2": models_ner.MultipleWindowCNN2,
+                    "WindowSequenceModel": models_ner.WindowSequenceModel,
+                    "SimpleLSTM": models_ner.SimpleLSTM}
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +177,12 @@ def main():
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
 
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        use_fast=model_args.use_fast,
+    )
+
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
@@ -179,6 +191,7 @@ def main():
         cache_dir=model_args.cache_dir,
     )
     config.max_seq_length = data_args.max_seq_length
+    config.pad_token_id = tokenizer.pad_token_id
 
     if model_args.model_class=="BERT":
         model = AutoModelForTokenClassification.from_pretrained(
@@ -193,12 +206,6 @@ def main():
         if model_args.custom_model_state_dict_path:
             model.load_state_dict(torch.load(model_args.custom_model_state_dict_path))
         model_type = "custom" #used for dataset tokens
-        
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast,
-    )
 
     # Get datasets
     train_dataset = (

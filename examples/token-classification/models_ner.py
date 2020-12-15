@@ -2,8 +2,11 @@
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
+import torch.nn.functional as F
+
 
 def get_token_classifier_like_output(logits, attention_mask, labels, num_labels):
+    ''' Provides the same output format as BertForTokenClassification.'''
     outputs = (logits,)
     if labels is not None:
         loss_fct = CrossEntropyLoss()
@@ -23,13 +26,252 @@ def get_token_classifier_like_output(logits, attention_mask, labels, num_labels)
 # LSTM-CRF
 
 # simple LSTM
+class SimpleLSTM(nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.rnn_size = 128
+        self.rnn_depth = 1
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.rnn = nn.LSTM(batch_first=True, input_size=self.embedding_dim, hidden_size=self.rnn_size, 
+                          bidirectional=True, num_layers=self.rnn_depth)
+
+        self.top_layer = nn.Linear(2*self.rnn_size, self.num_labels)
+              
+            
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids) #(n_seqs, max_len, emb_dim)
+                        
+        rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
+        output = self.top_layer(rnn_out)     
+        
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
 
 # KIM-CNN-ish with CRF
+class MultipleWindowCNN(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.cnn_kernel_nbr_pieces = 3
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.conv1 = nn.Conv2d(in_channels=1, 
+                               out_channels=self.num_labels, 
+                               kernel_size=(3, self.embedding_dim), 
+                               padding=(1,0))
+        self.conv2 = nn.Conv2d(in_channels=1, 
+                               out_channels=self.num_labels, 
+                               kernel_size=(5, self.embedding_dim), 
+                               padding=(2,0))
+        self.conv3 = nn.Conv2d(in_channels=1, 
+                               out_channels=self.num_labels, 
+                               kernel_size=(7, self.embedding_dim), 
+                               padding=(3,0))
+        
+        self.final_conv = nn.Conv1d(in_channels=self.num_labels, 
+                               out_channels=self.num_labels, 
+                               kernel_size=3, 
+                               padding=0,
+                               stride=3)
+        
+        self.final_pool = nn.AvgPool1d(kernel_size=3,
+                                       stride=3,
+                                       padding=0)
 
-# simple CNN
-#class CNNBasic(nn.Module):
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids).unsqueeze(1) #(32, 1, 128, 16)
+        output = (F.relu(self.conv1(output)).squeeze(3), 
+                  F.relu(self.conv2(output)).squeeze(3), 
+                  F.relu(self.conv3(output)).squeeze(3)) #(32, 9, 128)*3
+        output = torch.cat(output, 2) #(32, 9, 384)
+        #output = self.final_conv(output) #(32, 9, 128)
+        output = self.final_pool(output) #(32, 9, 128)
+        
+        output = torch.transpose(F.relu(output), 1, 2).contiguous() #(32, 128, 9)
+        
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+
+class MultipleWindowCNN2(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.cnn_kernel_nbr_pieces = 3
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.conv1 = nn.Conv2d(in_channels=1, 
+                               out_channels=self.num_labels, 
+                               kernel_size=(3, self.embedding_dim), 
+                               padding=(1,0))
+        self.conv2 = nn.Conv2d(in_channels=1, 
+                               out_channels=self.num_labels, 
+                               kernel_size=(5, self.embedding_dim), 
+                               padding=(2,0))
+        
+        self.final_conv = nn.Conv1d(in_channels=self.num_labels, 
+                               out_channels=self.num_labels, 
+                               kernel_size=3, 
+                               padding=0,
+                               stride=3)
+        
+        self.final_pool = nn.AvgPool1d(kernel_size=2,
+                                       stride=2,
+                                       padding=0)
+
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids).unsqueeze(1) #(32, 1, 128, 16)
+        output = (F.relu(self.conv1(output)).squeeze(3), 
+                  F.relu(self.conv2(output)).squeeze(3)) #(32, 9, 128)*2
+        output = torch.cat(output, 2) #(32, 9, 256)
+        #output = self.final_conv(output) #(32, 9, 128)
+        output = self.final_pool(output) #(32, 9, 128)
+        
+        output = torch.transpose(F.relu(output), 1, 2).contiguous() #(32, 128, 9)
+        
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+
+# simple CNN (softmax)
+class SimpleCNNSoftmax(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.cnn_kernel_nbr_pieces = 3
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.cnn = nn.Conv2d(in_channels=1, 
+                             out_channels=self.num_labels, 
+                             kernel_size=(self.cnn_kernel_nbr_pieces, self.embedding_dim), 
+                             padding=(int(self.cnn_kernel_nbr_pieces/2),0))
+
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids).unsqueeze(1) #(32, 1, 128, 16)
+        output = self.cnn(output).squeeze(3) #(32, 9, 128)
+        output = torch.transpose(F.softmax(output, dim=1), 1, 2).contiguous() #(32, 128, 9)
+        
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+
+# simple CNN (no softmax)
+class SimpleCNN(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.cnn_kernel_nbr_pieces = 3
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.cnn = nn.Conv2d(in_channels=1, 
+                             out_channels=self.num_labels, 
+                             kernel_size=(self.cnn_kernel_nbr_pieces, self.embedding_dim), 
+                             padding=(int(self.cnn_kernel_nbr_pieces/2),0))
+
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids).unsqueeze(1) #(32, 1, 128, 16)
+        output = self.cnn(output).squeeze(3) #(32, 9, 128)
+        output = torch.transpose(F.relu(output), 1, 2).contiguous() #(32, 128, 9)
+        
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+
+
+class WindowSequenceModel(nn.Module):
     
-
+    def __init__(self, config):
+        super().__init__()       
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.window_size = 3
+                 
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.top_layer = nn.Linear(self.window_size*self.embedding_dim, self.num_labels)
+                        
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids)
+        n_sent, _, emb_dim = output.shape
+        zero_pad = torch.zeros(n_sent, 1, emb_dim)
+        word_before_repr = torch.cat([zero_pad, output[:,:-1,:]], dim=1)
+        word_after_repr = torch.cat([output[:,1:,:], zero_pad], dim=1)
+        
+        # combine the 3 embedding tensors
+        window_repr = torch.cat([word_before_repr, output, word_after_repr], dim=2)
+        
+        output = self.top_layer(window_repr)
+        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
 
 # SVM-CRF
 
