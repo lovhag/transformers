@@ -205,6 +205,7 @@ def main():
         model = MODEL_CLASS_DICT[model_args.model_class](config)
         if model_args.custom_model_state_dict_path:
             model.load_state_dict(torch.load(model_args.custom_model_state_dict_path))
+        model.to(training_args.device)
         model_type = "custom" #used for dataset tokens
 
     # Get datasets
