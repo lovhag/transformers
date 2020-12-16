@@ -116,6 +116,7 @@ class WindowSequenceModel(nn.Module):
         self.num_labels = config.num_labels
         self.embedding_dim = 16
         self.window_size = 3
+        self.device = config.device
         
         # knowledge distillation params
         self.teacher_model = config.teacher_model
@@ -140,7 +141,7 @@ class WindowSequenceModel(nn.Module):
     ):
         output = self.embedding(input_ids)
         n_sent, _, emb_dim = output.shape
-        zero_pad = torch.zeros(n_sent, 1, emb_dim)
+        zero_pad = torch.zeros(n_sent, 1, emb_dim, device=self.device)
         word_before_repr = torch.cat([zero_pad, output[:,:-1,:]], dim=1)
         word_after_repr = torch.cat([output[:,1:,:], zero_pad], dim=1)
         

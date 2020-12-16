@@ -205,6 +205,7 @@ def main():
     )
     config.max_seq_length = data_args.max_seq_length
     config.pad_token_id = tokenizer.pad_token_id
+    config.device = training_args.device
     
     # setup kd params
     print(training_args)
