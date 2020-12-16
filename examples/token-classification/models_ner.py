@@ -23,6 +23,18 @@ def get_token_classifier_like_output(logits, attention_mask, labels, num_labels)
         outputs = (loss,) + outputs
         
     return outputs
+
+def get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, kd_param, loss_fct_kd):
+    standard_loss = outputs[0]
+    student_predictions = outputs[1]
+    
+    # take regard to attention mask?
+    kd_loss = loss_fct_kd(student_predictions, teacher_predictions)
+    total_loss = (1-kd_param)*standard_loss+kd_param*kd_loss
+    
+    outputs = (total_loss, student_predictions)
+    return outputs
+    
 # LSTM-CRF
 
 # simple LSTM
@@ -96,6 +108,54 @@ class SimpleLSTM(nn.Module):
         output = self.top_layer(rnn_out)     
         
         return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+
+class WindowSequenceModel(nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()       
+        self.num_labels = config.num_labels
+        self.embedding_dim = 16
+        self.window_size = 3
+        
+        # knowledge distillation params
+        self.teacher_model = config.teacher_model
+        self.loss_fct_kd = config.loss_fct_kd
+        self.kd_param = config.kd_param
+                 
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.top_layer = nn.Linear(self.window_size*self.embedding_dim, self.num_labels)
+                        
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+    ):
+        output = self.embedding(input_ids)
+        n_sent, _, emb_dim = output.shape
+        zero_pad = torch.zeros(n_sent, 1, emb_dim)
+        word_before_repr = torch.cat([zero_pad, output[:,:-1,:]], dim=1)
+        word_after_repr = torch.cat([output[:,1:,:], zero_pad], dim=1)
+        
+        # combine the 3 embedding tensors
+        window_repr = torch.cat([word_before_repr, output, word_after_repr], dim=2)
+        
+        output = self.top_layer(window_repr)
+        
+        outputs = get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+        if self.kd_param == 0:
+            return outputs
+        else:
+            # should fix such that we only need to fetch teacher predictions once
+            teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
+            return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
 
 # KIM-CNN-ish with CRF
 class MultipleWindowCNN(nn.Module):
@@ -269,43 +329,6 @@ class SimpleCNN(nn.Module):
         output = self.cnn(output).squeeze(3) #(32, 9, 128)
         output = torch.transpose(F.relu(output), 1, 2).contiguous() #(32, 128, 9)
         
-        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
-
-
-class WindowSequenceModel(nn.Module):
-    
-    def __init__(self, config):
-        super().__init__()       
-        self.num_labels = config.num_labels
-        self.embedding_dim = 16
-        self.window_size = 3
-                 
-        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
-                                      embedding_dim=self.embedding_dim, 
-                                      padding_idx=config.pad_token_id)
-        
-        self.top_layer = nn.Linear(self.window_size*self.embedding_dim, self.num_labels)
-                        
-    def forward(self, input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-    ):
-        output = self.embedding(input_ids)
-        n_sent, _, emb_dim = output.shape
-        zero_pad = torch.zeros(n_sent, 1, emb_dim)
-        word_before_repr = torch.cat([zero_pad, output[:,:-1,:]], dim=1)
-        word_after_repr = torch.cat([output[:,1:,:], zero_pad], dim=1)
-        
-        # combine the 3 embedding tensors
-        window_repr = torch.cat([word_before_repr, output, word_after_repr], dim=2)
-        
-        output = self.top_layer(window_repr)
         return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
 
 # SVM-CRF

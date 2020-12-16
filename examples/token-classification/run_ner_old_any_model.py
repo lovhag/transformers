@@ -50,6 +50,8 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM": models_ner.SimpleLSTM,
                     "SimpleLSTM128": models_ner.SimpleLSTM128}
 
+LOSS_FCT_KD_DICT = {"KL": lambda input, target: nn.functional.kl_div(input, target, reduction='batchmean')}
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -83,6 +85,17 @@ class ModelArguments:
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
+    kd_param: Optional[float] = field(
+        default=0,
+        metadata={
+            "help": "The coefficient for knowledge distillation training. Zero means no distillation training."}
+    )
+    loss_fct_kd: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The loss function to use for knowledge distillation training."
+        }
+    )
 
 
 @dataclass
@@ -108,7 +121,6 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
@@ -193,6 +205,24 @@ def main():
     )
     config.max_seq_length = data_args.max_seq_length
     config.pad_token_id = tokenizer.pad_token_id
+    
+    # setup kd params
+    print(training_args)
+    config.kd_param = model_args.kd_param
+    config.loss_fct_kd = None
+    config.teacher_model = None
+    if config.kd_param > 0:
+        config.loss_fct_kd = LOSS_FCT_KD_DICT[model_args.loss_fct_kd]
+
+        if model_args.model_class=="BERT":
+            raise ValueError("The BERT model is the trainer model. You cannot KD train a BERT with the same BERT.")
+        
+        config.teacher_model = AutoModelForTokenClassification.from_pretrained(
+            model_args.model_name_or_path,
+            from_tf=bool(".ckpt" in model_args.model_name_or_path),
+            config=config,
+            cache_dir=model_args.cache_dir,
+        )
 
     if model_args.model_class=="BERT":
         model = AutoModelForTokenClassification.from_pretrained(
