@@ -34,7 +34,7 @@ def get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, kd_pa
     # target should be probabilities
     teacher_predictions = F.softmax(teacher_predictions, -1)
     kd_loss = loss_fct_kd(student_predictions, teacher_predictions)
-    total_loss = (1-kd_param)*standard_loss+kd_param*kd_loss
+    total_loss = standard_loss+kd_param*kd_loss
     
     outputs = (total_loss, student_predictions)
     return outputs
