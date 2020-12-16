@@ -151,11 +151,12 @@ class WindowSequenceModel(nn.Module):
         output = self.top_layer(window_repr)
         
         outputs = get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
-        if self.kd_param == 0:
+        if self.kd_param == 0 or not self.training:
             return outputs
         else:
-            # should fix such that we only need to fetch teacher predictions once
-            teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
+            with torch.no_grad():
+                # should fix such that we only need to fetch teacher predictions once
+                teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
             return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
 
 # KIM-CNN-ish with CRF

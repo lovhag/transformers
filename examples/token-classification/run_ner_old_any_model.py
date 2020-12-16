@@ -208,7 +208,6 @@ def main():
     config.device = training_args.device
     
     # setup kd params
-    print(training_args)
     config.kd_param = model_args.kd_param
     config.loss_fct_kd = None
     config.teacher_model = None
