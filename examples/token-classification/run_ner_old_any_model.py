@@ -223,6 +223,8 @@ def main():
             config=config,
             cache_dir=model_args.cache_dir,
         )
+        config.teacher_model.to(training_args.device)
+        config.teacher_model.eval()
 
     if model_args.model_class=="BERT":
         model = AutoModelForTokenClassification.from_pretrained(
