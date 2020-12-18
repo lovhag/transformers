@@ -289,11 +289,11 @@ def main():
                 logger.info("  %s = %s", key, value)
                 writer.write("%s = %s\n" % (key, value))
 
-    # Save predictions
+    # Save train predictions
     output_train_predictions_file = os.path.join(training_args.output_dir, "train_predictions.txt")
     if trainer.is_world_process_zero():
         with open(output_train_predictions_file, "w") as writer:
-            with open(os.path.join(data_args.data_dir, "test.txt"), "r") as f:
+            with open(os.path.join(data_args.data_dir, "train.txt"), "r") as f:
                 token_classification_task.write_predictions_to_file(writer, f, preds_list)
 
     return results
