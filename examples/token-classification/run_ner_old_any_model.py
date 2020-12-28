@@ -38,7 +38,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
+from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask, TokenClassificationDatasetKD
 import models_ner
 
 MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
@@ -51,6 +51,8 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM128": models_ner.SimpleLSTM128}
 
 LOSS_FCT_KD_DICT = {"KL": lambda input, target: nn.functional.kl_div(input, target, reduction='batchmean')}
+DATA_CLASS_DICT = {"default": TokenClassificationDataset,
+                   "KD": TokenClassificationDatasetKD}
 
 logger = logging.getLogger(__name__)
 
@@ -242,8 +244,12 @@ def main():
         model_type = "custom" #used for dataset tokens
 
     # Get datasets
+    if config.kd_param > 0:
+        DataSetClass = DATA_CLASS_DICT["KD"]
+    else:
+        DataSetClass = DATA_CLASS_DICT["default"]  
     train_dataset = (
-        TokenClassificationDataset(
+        DataSetClass(
             token_classification_task=token_classification_task,
             data_dir=data_args.data_dir,
             tokenizer=tokenizer,

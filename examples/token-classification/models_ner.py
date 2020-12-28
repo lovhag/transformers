@@ -28,7 +28,7 @@ def get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, kd_pa
     standard_loss = outputs[0]
     student_predictions = outputs[1]
     
-    # take regard to attention mask?
+    # TODO: take regard to attention mask!!
     # input should be log-probabilities
     student_predictions = F.log_softmax(student_predictions, -1)
     # target should be probabilities
@@ -142,6 +142,7 @@ class WindowSequenceModel(nn.Module):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        teacher_predictions=None
     ):
         output = self.embedding(input_ids)
         n_sent, _, emb_dim = output.shape
@@ -158,9 +159,9 @@ class WindowSequenceModel(nn.Module):
         if self.kd_param == 0 or not self.training:
             return outputs
         else:
-            with torch.no_grad():
+            #with torch.no_grad():
                 # should fix such that we only need to fetch teacher predictions once
-                teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
+                #teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
             return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
 
 # KIM-CNN-ish with CRF
