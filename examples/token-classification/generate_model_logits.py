@@ -296,6 +296,17 @@ def main():
             with open(os.path.join(data_args.data_dir, "train.txt"), "r") as f:
                 token_classification_task.write_predictions_to_file(writer, f, preds_list)
 
+    # Save word piece predictions
+    output_word_piece_predictions_file = os.path.join(training_args.output_dir, "train_word_piece_predictions.txt")
+    assert len(train_dataset) == len(predictions)
+    with open(output_word_piece_predictions_file, "w") as writer:
+        writer.write("word_piece label_id prediction \n")
+        for example_index, example in enumerate(train_dataset.features):
+            for index, word_piece in enumerate(tokenizer.convert_ids_to_tokens(example.input_ids)):
+                predicted_label_id = np.argmax(predictions[example_index][index])
+                writer.write(word_piece + " " + str(example.label_ids[index]) + " " + str(predicted_label_id) + "\n")
+            writer.write("\n")
+
     return results
 
 
