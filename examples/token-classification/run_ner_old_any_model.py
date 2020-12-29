@@ -36,6 +36,8 @@ from transformers import (
     Trainer,
     TrainingArguments,
     set_seed,
+    get_constant_schedule_with_warmup,
+    AdamW
 )
 from transformers.trainer_utils import is_main_process
 from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask, TokenClassificationDatasetKD
@@ -51,9 +53,11 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM": models_ner.SimpleLSTM,
                     "SimpleLSTM128": models_ner.SimpleLSTM128}
 
-LOSS_FCT_KD_DICT = {"KL": lambda input, target: nn.functional.kl_div(input, target, reduction='batchmean')}
+LOSS_FCT_KD_DICT = {"KL": nn.functional.kl_div}
 DATA_CLASS_DICT = {"default": TokenClassificationDataset,
                    "KD": TokenClassificationDatasetKD}
+
+OPTIMIZER_DICT = {"Adam": torch.optim.Adam}
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +91,14 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+    )
+    optimizer: Optional[str] = field(
+        default=None,
+        metadata={"help": "Name of desired optimizer"}
+    )
+    use_constant_lr: bool = field(
+        default=False,
+        metadata={"help": "Whether to use constant lr during training"}
     )
     kd_param: Optional[float] = field(
         default=0,
@@ -303,6 +315,35 @@ def main():
             "f1": f1_score(out_label_list, preds_list),
         }
 
+    # Setup optimizer and lr scheduler
+    no_decay = ["bias", "LayerNorm.weight"]
+    optimizer_grouped_parameters = [
+            {
+                "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
+                "weight_decay": training_args.weight_decay,
+            },
+            {
+                "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+                "weight_decay": 0.0,
+            },
+        ]
+        
+    if model_args.optimizer:
+        optimizer_function = OPTIMIZER_DICT[model_args.optimizer]
+        optimizer = optimizer_function(params=optimizer_grouped_parameters,
+                                       lr=training_args.learning_rate, 
+                                       betas=(training_args.adam_beta1, 
+                                              training_args.adam_beta2), 
+                                       eps=training_args.adam_epsilon, 
+                                       weight_decay=training_args.weight_decay, 
+                                       amsgrad=False)
+    else:
+        optimizer = AdamW(params=optimizer_grouped_parameters,
+                          lr=training_args.learning_rate,
+                          betas=(training_args.adam_beta1, training_args.adam_beta2),
+                          eps=training_args.adam_epsilon)
+    lr_scheduler = get_constant_schedule_with_warmup(optimizer=optimizer, num_warmup_steps=training_args.warmup_steps) if model_args.use_constant_lr else None
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
@@ -310,6 +351,7 @@ def main():
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
         compute_metrics=compute_metrics,
+        optimizers=(optimizer, lr_scheduler)
     )
 
     # Training
