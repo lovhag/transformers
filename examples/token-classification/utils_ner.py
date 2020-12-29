@@ -33,7 +33,7 @@ def read_teacher_predictions_from_file(file_path, num_examples, max_seq_length):
     nbr_examples = 0
     with open(file_path, "r") as f:
         for line in f:
-            if len(line) == 0:
+            if line == "" or line =="\n":
                 if len(teacher_predictions[nbr_examples]) > 0:
                     assert len(teacher_predictions[nbr_examples]) == max_seq_length
                     nbr_examples += 1
@@ -339,13 +339,13 @@ class TokenClassificationTask:
                 label_ids += [pad_token_label_id] * padding_length
                 
             # Add teacher predictions
-            teacher_predictions = teacher_predictions[ex_index]
+            ex_teacher_predictions = teacher_predictions[ex_index]
 
             assert len(input_ids) == max_seq_length
             assert len(input_mask) == max_seq_length
             assert len(segment_ids) == max_seq_length
             assert len(label_ids) == max_seq_length
-            assert len(teacher_predictions) == max_seq_length
+            assert len(ex_teacher_predictions) == max_seq_length
 
             if ex_index < 5:
                 logger.info("*** Example ***")
@@ -355,7 +355,7 @@ class TokenClassificationTask:
                 logger.info("input_mask: %s", " ".join([str(x) for x in input_mask]))
                 logger.info("segment_ids: %s", " ".join([str(x) for x in segment_ids]))
                 logger.info("label_ids: %s", " ".join([str(x) for x in label_ids]))
-                logger.info("teacher_predictions: %s", " ".join([str(x) for x in teacher_predictions]))
+                logger.info("teacher_predictions: %s", " ".join([str(x) for x in ex_teacher_predictions]))
                 
 
             if "token_type_ids" not in tokenizer.model_input_names:
@@ -367,7 +367,7 @@ class TokenClassificationTask:
                     attention_mask=input_mask, 
                     token_type_ids=segment_ids, 
                     label_ids=label_ids, 
-                    teacher_predictions=teacher_predictions
+                    teacher_predictions=ex_teacher_predictions
                 )
             )
         return features
@@ -485,7 +485,7 @@ if is_torch_available():
                     logger.info(f"Creating features from dataset file at {data_dir}")
                     examples = token_classification_task.read_examples_from_file(data_dir, mode)
                     teacher_predictions_file = data_dir+"/teacher_predictions.txt"
-                    teacher_predictions = read_teacher_predictions_from_file(teacher_predictions_file, len(examples), self.max_seq_length)
+                    teacher_predictions = read_teacher_predictions_from_file(teacher_predictions_file, len(examples), max_seq_length)
                     # TODO clean up all this to leverage built-in features of tokenizers
                     self.features = token_classification_task.convert_examples_to_features_kd(
                         teacher_predictions,

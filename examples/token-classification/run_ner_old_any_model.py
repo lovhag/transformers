@@ -47,6 +47,7 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "MultipleWindowCNN": models_ner.MultipleWindowCNN,
                     "MultipleWindowCNN2": models_ner.MultipleWindowCNN2,
                     "WindowSequenceModel": models_ner.WindowSequenceModel,
+                    "WindowSequenceModel128": models_ner.WindowSequenceModel128,
                     "SimpleLSTM": models_ner.SimpleLSTM,
                     "SimpleLSTM128": models_ner.SimpleLSTM128}
 
