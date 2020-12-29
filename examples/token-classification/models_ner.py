@@ -27,14 +27,25 @@ def get_token_classifier_like_output(logits, attention_mask, labels, num_labels)
 def get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, kd_param, loss_fct_kd):
     standard_loss = outputs[0]
     student_predictions = outputs[1]
+    batchsize = student_predictions.shape[0]
     
     # TODO: take regard to attention mask!!
     # input should be log-probabilities
     student_predictions = F.log_softmax(student_predictions, -1)
     # target should be probabilities
     teacher_predictions = F.softmax(teacher_predictions, -1)
-    kd_loss = loss_fct_kd(student_predictions, teacher_predictions)
-    total_loss = standard_loss+kd_param*kd_loss
+    kd_loss = loss_fct_kd(student_predictions, teacher_predictions, reduction='none').sum(dim=2)
+    # ignore loss contributions for values without attention
+    if attention_mask is not None:
+        active_loss = attention_mask.view(-1) == 1
+        active_kd_loss = torch.where(
+            active_loss, kd_loss.view(-1), torch.tensor(0).type_as(kd_loss)
+        )
+    else:    
+        active_kd_loss = kd_loss   
+        
+    active_kd_loss = active_kd_loss.sum()/batchsize
+    total_loss = standard_loss+kd_param*active_kd_loss
     
     outputs = (total_loss, student_predictions)
     return outputs
@@ -50,6 +61,10 @@ class SimpleLSTM128(nn.Module):
         self.embedding_dim = 128
         self.rnn_size = 128
         self.rnn_depth = 1
+        
+        # knowledge distillation params
+        self.loss_fct_kd = config.loss_fct_kd
+        self.kd_param = config.kd_param
         
         self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
                                       embedding_dim=self.embedding_dim, 
@@ -70,13 +85,21 @@ class SimpleLSTM128(nn.Module):
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
+        teacher_predictions=None
     ):
         output = self.embedding(input_ids) #(n_seqs, max_len, emb_dim)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
         
-        return get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+        outputs = get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+        if self.kd_param == 0 or not self.training:
+            return outputs
+        else:
+            #with torch.no_grad():
+                # should fix such that we only need to fetch teacher predictions once
+                #teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
+            return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
 class SimpleLSTM(nn.Module):
     
     def __init__(self, config):
@@ -123,7 +146,6 @@ class WindowSequenceModel128(nn.Module):
         self.device = config.device
         
         # knowledge distillation params
-        self.teacher_model = config.teacher_model
         self.loss_fct_kd = config.loss_fct_kd
         self.kd_param = config.kd_param
                  
@@ -159,9 +181,6 @@ class WindowSequenceModel128(nn.Module):
         if self.kd_param == 0 or not self.training:
             return outputs
         else:
-            #with torch.no_grad():
-                # should fix such that we only need to fetch teacher predictions once
-                #teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
             return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
 class WindowSequenceModel(nn.Module):
     
