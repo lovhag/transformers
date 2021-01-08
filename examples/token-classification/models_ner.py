@@ -62,8 +62,9 @@ class SimpleLSTM128Depth2Dropout02(nn.Module):
         # knowledge distillation params
         self.loss_fct_kd = config.loss_fct_kd
         self.kd_param = config.kd_param
-        
-        self.dropout = nn.Dropout(p=0.2)
+
+        self.pad_token_id = config.pad_token_id        
+        self.dropout_prob = 0.2
         self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
                                       embedding_dim=self.embedding_dim, 
                                       padding_idx=config.pad_token_id)
@@ -85,8 +86,10 @@ class SimpleLSTM128Depth2Dropout02(nn.Module):
         output_hidden_states=None,
         teacher_predictions=None
     ):
-        output = self.dropout(input_ids)
-        output = self.embedding(output) #(n_seqs, max_len, emb_dim)
+        # word dropout: with droput probability replace input id with pad token id
+        droput_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
+        input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
+        output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
@@ -162,7 +165,8 @@ class SimpleLSTM128Dropout02(nn.Module):
         self.loss_fct_kd = config.loss_fct_kd
         self.kd_param = config.kd_param
         
-        self.dropout = nn.Dropout(p=0.2)
+        self.pad_token_id = config.pad_token_id
+        self.dropout_prob = 0.2
         self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
                                       embedding_dim=self.embedding_dim, 
                                       padding_idx=config.pad_token_id)
@@ -184,8 +188,10 @@ class SimpleLSTM128Dropout02(nn.Module):
         output_hidden_states=None,
         teacher_predictions=None
     ):
-        output = self.dropout(input_ids)
-        output = self.embedding(output) #(n_seqs, max_len, emb_dim)
+        # word dropout: with droput probability replace input id with pad token id
+        droput_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
+        input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
+        output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
