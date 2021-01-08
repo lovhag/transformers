@@ -53,7 +53,10 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "WindowSequenceModel128AllKD": models_ner.WindowSequenceModel128AllKD,
                     "SimpleLSTM": models_ner.SimpleLSTM,
                     "SimpleLSTM128": models_ner.SimpleLSTM128,
-                    "SimpleLSTM128Depth2": models_ner.SimpleLSTM128Depth2}
+                    "SimpleLSTM128AllKD": models_ner.SimpleLSTM128AllKD,
+                    "SimpleLSTM128Dropout02": models_ner.SimpleLSTM128Dropout02,
+                    "SimpleLSTM128Depth2": models_ner.SimpleLSTM128Depth2,
+                    "SimpleLSTM128Depth2Dropout02": models_ner.SimpleLSTM128Depth2Dropout02}
 
 LOSS_FCT_KD_DICT = {"KL": nn.functional.kl_div}
 DATA_CLASS_DICT = {"default": TokenClassificationDataset,
