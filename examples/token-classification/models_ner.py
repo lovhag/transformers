@@ -87,9 +87,12 @@ class SimpleLSTM128Depth2Dropout02(nn.Module):
         teacher_predictions=None
     ):
         # word dropout: with droput probability replace input id with pad token id
-        dropout_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
-        input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
-        output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
+        if self.training:
+            dropout_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
+            input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
+            output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
+        else:
+            output = self.embedding(input_ids)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
@@ -189,9 +192,12 @@ class SimpleLSTM128Dropout02(nn.Module):
         teacher_predictions=None
     ):
         # word dropout: with droput probability replace input id with pad token id
-        dropout_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
-        input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
-        output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
+        if self.training:
+            dropout_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
+            input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
+            output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
+        else:
+            output = self.embedding(input_ids)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
