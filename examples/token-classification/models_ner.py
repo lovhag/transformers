@@ -49,6 +49,62 @@ def get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, kd_pa
     
     outputs = (total_loss, student_predictions)
     return outputs
+
+class SimpleLSTM128Depth3Dropout02(nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 128
+        self.rnn_size = 128
+        self.rnn_depth = 3
+        
+        # knowledge distillation params
+        self.loss_fct_kd = config.loss_fct_kd
+        self.kd_param = config.kd_param
+
+        self.pad_token_id = config.pad_token_id        
+        self.dropout_prob = 0.2
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.rnn = nn.LSTM(batch_first=True, input_size=self.embedding_dim, hidden_size=self.rnn_size, 
+                          bidirectional=True, num_layers=self.rnn_depth)
+
+        self.top_layer = nn.Linear(2*self.rnn_size, self.num_labels)
+              
+            
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        teacher_predictions=None
+    ):
+        # word dropout: with droput probability replace input id with pad token id
+        if self.training:
+            dropout_mask = torch.empty_like(input_ids).bernoulli_(1-self.dropout_prob)
+            input_ids_after_dropout = torch.where(dropout_mask == 1, input_ids, self.pad_token_id)
+            output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
+        else:
+            output = self.embedding(input_ids)
+                        
+        rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
+        output = self.top_layer(rnn_out)     
+        
+        outputs = get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+        if self.kd_param == 0 or not self.training:
+            return outputs
+        else:
+            #with torch.no_grad():
+                # should fix such that we only need to fetch teacher predictions once
+                #teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
+            return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)    
     
 class SimpleLSTM128Depth2Dropout02(nn.Module):
     
@@ -258,6 +314,55 @@ class SimpleLSTM128AllKD(nn.Module):
         else:
             # set standard loss to 0 and only use KD loss
             outputs = (0, outputs[1])
+            return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
+
+# simple LSTM, higher embedding dim and rnn size
+class SimpleLSTM256(nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = 256
+        self.rnn_size = 256
+        self.rnn_depth = 1
+        
+        # knowledge distillation params
+        self.loss_fct_kd = config.loss_fct_kd
+        self.kd_param = config.kd_param
+        
+        self.embedding = nn.Embedding(num_embeddings=config.vocab_size, 
+                                      embedding_dim=self.embedding_dim, 
+                                      padding_idx=config.pad_token_id)
+        
+        self.rnn = nn.LSTM(batch_first=True, input_size=self.embedding_dim, hidden_size=self.rnn_size, 
+                          bidirectional=True, num_layers=self.rnn_depth)
+
+        self.top_layer = nn.Linear(2*self.rnn_size, self.num_labels)
+              
+            
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        teacher_predictions=None
+    ):
+        output = self.embedding(input_ids) #(n_seqs, max_len, emb_dim)
+                        
+        rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
+        output = self.top_layer(rnn_out)     
+        
+        outputs = get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+        if self.kd_param == 0 or not self.training:
+            return outputs
+        else:
+            #with torch.no_grad():
+                # should fix such that we only need to fetch teacher predictions once
+                #teacher_predictions = self.teacher_model(input_ids, attention_mask, token_type_ids, position_ids, head_mask, inputs_embeds, labels, output_attentions, output_hidden_states)["logits"]
             return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
 
 
