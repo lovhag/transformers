@@ -373,6 +373,7 @@ class SimpleLSTM256Depth3Dropout02(nn.Module):
         self.rnn_size = 256
         self.rnn_depth = 3
         self.dropout_prob = 0.2
+        self.pad_token_id = config.pad_token_id
         
         # knowledge distillation params
         self.loss_fct_kd = config.loss_fct_kd
@@ -430,6 +431,7 @@ class SimpleLSTM256Depth2Dropout02(nn.Module):
         self.rnn_size = 256
         self.rnn_depth = 2
         self.dropout_prob = 0.2
+        self.pad_token_id = config.pad_token_id
         
         # knowledge distillation params
         self.loss_fct_kd = config.loss_fct_kd
