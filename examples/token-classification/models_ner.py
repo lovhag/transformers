@@ -407,7 +407,6 @@ class SimpleLSTM256Depth3Dropout02(nn.Module):
             output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
         else:
             output = self.embedding(input_ids)
-        output = self.embedding(output) #(n_seqs, max_len, emb_dim)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
@@ -465,7 +464,6 @@ class SimpleLSTM256Depth2Dropout02(nn.Module):
             output = self.embedding(input_ids_after_dropout) #(n_seqs, max_len, emb_dim)
         else:
             output = self.embedding(input_ids)
-        output = self.embedding(output) #(n_seqs, max_len, emb_dim)
                         
         rnn_out, _ = self.rnn(output) #(n_seqs, max_len, 2*rnn_size)
         output = self.top_layer(rnn_out)     
