@@ -62,6 +62,7 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM256Dropout02": models_ner.SimpleLSTM256Dropout02,
                     "SimpleLSTM256Depth2Dropout02": models_ner.SimpleLSTM256Depth2Dropout02,
                     "SimpleLSTM256Depth2Dropout02RNNDropout02": models_ner.SimpleLSTM256Depth2Dropout02RNNDropout02,
+                    "SimpleLSTM256Depth2Dropout05RNNDropout05": models_ner.SimpleLSTM256Depth2Dropout05RNNDropout05,
                     "SimpleLSTM256Depth3Dropout02": models_ner.SimpleLSTM256Depth3Dropout02,
                     "SimpleLSTM512": models_ner.SimpleLSTM512}
 
