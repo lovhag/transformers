@@ -58,6 +58,7 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM128Depth2": models_ner.SimpleLSTM128Depth2,
                     "SimpleLSTM128Depth2Dropout02": models_ner.SimpleLSTM128Depth2Dropout02,
                     "SimpleLSTM128Depth3Dropout02": models_ner.SimpleLSTM128Depth3Dropout02,
+                    "SimpleLSTM128BertEmbeddingsFrozen": models_ner.SimpleLSTM128BertEmbeddingsFrozen,
                     "SimpleLSTM256": models_ner.SimpleLSTM256,
                     "SimpleLSTM256Dropout02": models_ner.SimpleLSTM256Dropout02,
                     "SimpleLSTM256Depth2Dropout02": models_ner.SimpleLSTM256Depth2Dropout02,
@@ -122,6 +123,12 @@ class ModelArguments:
         default=None,
         metadata={
             "help": "The loss function to use for knowledge distillation training."
+        }
+    )
+    bert_embeddings_path: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The path to the bert embedding weights tensor if pre-trained embeddings are to be used."
         }
     )
 
@@ -235,24 +242,16 @@ def main():
     config.pad_token_id = tokenizer.pad_token_id
     config.device = training_args.device
     
+    # pass BERT embeddings if should be loaded to model
+    config.bert_embeddings = None
+    if model_args.bert_embeddings_path:
+        config.bert_embeddings = torch.load(model_args.bert_embeddings_path)
+    
     # setup kd params
     config.kd_param = model_args.kd_param
     config.loss_fct_kd = None
-    config.teacher_model = None
     if config.kd_param > 0:
         config.loss_fct_kd = LOSS_FCT_KD_DICT[model_args.loss_fct_kd]
-
-        if model_args.model_class=="BERT":
-            raise ValueError("The BERT model is the trainer model. You cannot KD train a BERT with the same BERT.")
-        
-        config.teacher_model = AutoModelForTokenClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-        )
-        config.teacher_model.to(training_args.device)
-        config.teacher_model.eval()
 
     if model_args.model_class=="BERT":
         model = AutoModelForTokenClassification.from_pretrained(
