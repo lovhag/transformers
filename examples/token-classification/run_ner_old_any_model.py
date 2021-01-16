@@ -131,6 +131,13 @@ class ModelArguments:
             "help": "The path to the bert embedding weights tensor if pre-trained embeddings are to be used."
         }
     )
+    num_emb_frozen_train_epochs: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "The number of epochs to train the model with frozen embeddings before training "
+            "with unfrozen embeddings for num_train_epochs."
+        }
+    )
 
 
 @dataclass
@@ -368,9 +375,23 @@ def main():
 
     # Training
     if training_args.do_train:
-        trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        )
+        # assume model embeddings are initially frozen
+        if model_args.bert_embeddings_path and model_args.num_emb_frozen_train_epochs:
+            num_train_epochs = training_args.num_train_epochs
+            logging_dir = training_args.logging_dir
+            
+            trainer.args.num_train_epochs = model_args.num_emb_frozen_train_epochs
+            trainer.args.logging_dir = logging_dir+"_frozen"
+            model.embedding.weight.requires_grad = False
+            logger.info("Training model with frozen embedding layer for %d epochs", model_args.num_emb_frozen_train_epochs)
+            trainer.train()
+            
+            # resume original training unfrozen
+            trainer.args.num_train_epochs = num_train_epochs
+            trainer.args.logging_dir = logging_dir
+            model.embedding.weight.requires_grad = True
+            
+        trainer.train()
         trainer.save_model()
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
