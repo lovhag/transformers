@@ -51,6 +51,7 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "WindowSequenceModel": models_ner.WindowSequenceModel,
                     "WindowSequenceModel128": models_ner.WindowSequenceModel128,
                     "WindowSequenceModel128AllKD": models_ner.WindowSequenceModel128AllKD,
+                    "WindowSequenceModelBertEmbeddingsFrozen": models_ner.WindowSequenceModelBertEmbeddingsFrozen,
                     "SimpleLSTM": models_ner.SimpleLSTM,
                     "SimpleLSTM128": models_ner.SimpleLSTM128,
                     "SimpleLSTM128AllKD": models_ner.SimpleLSTM128AllKD,
@@ -386,14 +387,19 @@ def main():
                 compute_metrics=compute_metrics,
                 optimizers=(optimizer, lr_scheduler)
             )
+            logging_dir = training_args.logging_dir
+            num_train_epochs = training_args.num_train_epochs
+            
             trainer_frozen.args.num_train_epochs = model_args.num_emb_frozen_train_epochs
-            trainer_frozen.args.logging_dir = trainer_frozen.args.logging_dir+"_frozen"
+            trainer_frozen.args.logging_dir = logging_dir+"_frozen"
             model.embedding.weight.requires_grad = False
             logger.info("Training model with frozen embedding layer for %d epochs", model_args.num_emb_frozen_train_epochs)
             trainer_frozen.train()
             
             # resume original training unfrozen
             model.embedding.weight.requires_grad = True
+            training_args.logging_dir = logging_dir
+            training_args.num_train_epochs = num_train_epochs
             
             
         trainer.train()

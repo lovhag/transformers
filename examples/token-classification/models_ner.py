@@ -929,6 +929,54 @@ class WindowSequenceModel128AllKD(nn.Module):
             # set standard loss to 0 and only use KD loss
             outputs = (0, outputs[1])
             return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
+
+class WindowSequenceModelBertEmbeddingsFrozen(nn.Module):
+    
+    def __init__(self, config):
+        super().__init__()
+        self.num_labels = config.num_labels
+        self.embedding_dim = config.bert_embeddings.shape[1]
+        self.window_size = 3
+        self.device = config.device
+        
+        # knowledge distillation params
+        self.loss_fct_kd = config.loss_fct_kd
+        self.kd_param = config.kd_param
+        
+        self.embedding = nn.Embedding.from_pretrained(config.bert_embeddings, 
+                                                      freeze=True,
+                                                      padding_idx=config.pad_token_id)
+        
+        self.top_layer = nn.Linear(self.window_size*self.embedding_dim, self.num_labels)
+
+    def forward(self, input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        teacher_predictions=None
+    ):
+        output = self.embedding(input_ids)
+        n_sent, _, emb_dim = output.shape
+        zero_pad = torch.zeros(n_sent, 1, emb_dim, device=self.device)
+        word_before_repr = torch.cat([zero_pad, output[:,:-1,:]], dim=1)
+        word_after_repr = torch.cat([output[:,1:,:], zero_pad], dim=1)
+        
+        # combine the 3 embedding tensors
+        window_repr = torch.cat([word_before_repr, output, word_after_repr], dim=2)
+        
+        output = self.top_layer(window_repr)
+        
+        outputs = get_token_classifier_like_output(output, attention_mask, labels, self.num_labels)
+        if self.kd_param == 0 or not self.training:
+            return outputs
+        else:
+            return get_outputs_with_kd_loss(outputs, attention_mask, teacher_predictions, self.kd_param, self.loss_fct_kd)
+
 class WindowSequenceModel128(nn.Module):
     
     def __init__(self, config):
