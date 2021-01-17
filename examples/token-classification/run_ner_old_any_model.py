@@ -387,7 +387,7 @@ def main():
                 optimizers=(optimizer, lr_scheduler)
             )
             trainer_frozen.args.num_train_epochs = model_args.num_emb_frozen_train_epochs
-            trainer_frozen.args.logging_dir = logging_dir+"_frozen"
+            trainer_frozen.args.logging_dir = trainer_frozen.args.logging_dir+"_frozen"
             model.embedding.weight.requires_grad = False
             logger.info("Training model with frozen embedding layer for %d epochs", model_args.num_emb_frozen_train_epochs)
             trainer_frozen.train()
