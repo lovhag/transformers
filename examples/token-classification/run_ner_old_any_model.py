@@ -378,7 +378,14 @@ def main():
     if training_args.do_train:
         # assume model embeddings are initially frozen
         if model_args.bert_embeddings_path and model_args.num_emb_frozen_train_epochs:
-            trainer_frozen = trainer.copy()
+            trainer_frozen = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                compute_metrics=compute_metrics,
+                optimizers=(optimizer, lr_scheduler)
+            )
             trainer_frozen.args.num_train_epochs = model_args.num_emb_frozen_train_epochs
             trainer_frozen.args.logging_dir = logging_dir+"_frozen"
             model.embedding.weight.requires_grad = False
