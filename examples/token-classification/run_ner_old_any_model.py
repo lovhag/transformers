@@ -401,8 +401,8 @@ def main():
             training_args.logging_dir = logging_dir
             training_args.num_train_epochs = num_train_epochs
             
-            
-        trainer.train()
+        if training_args.num_train_epochs is not 0:
+            trainer.train()
         trainer.save_model()
         # For convenience, we also re-save the tokenizer to the same directory,
         # so that you can share your model easily on huggingface.co/models =)
