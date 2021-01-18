@@ -378,7 +378,7 @@ def main():
     # Training
     if training_args.do_train:
         # assume model embeddings are initially frozen
-        if model_args.bert_embeddings_path and model_args.num_emb_frozen_train_epochs:
+        if model_args.bert_embeddings_path and model_args.num_emb_frozen_train_epochs and model_args.num_emb_frozen_train_epochs>0:
             trainer_frozen = Trainer(
                 model=model,
                 args=training_args,
@@ -401,7 +401,7 @@ def main():
             training_args.logging_dir = logging_dir
             training_args.num_train_epochs = num_train_epochs
             
-        if training_args.num_train_epochs is not 0:
+        if training_args.num_train_epochs > 0:
             trainer.train()
         trainer.save_model()
         # For convenience, we also re-save the tokenizer to the same directory,
