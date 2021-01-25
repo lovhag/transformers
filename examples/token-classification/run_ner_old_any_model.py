@@ -42,6 +42,7 @@ from transformers import (
 from transformers.trainer_utils import is_main_process
 from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask, TokenClassificationDatasetKD
 import models_ner
+from dataclasses import fields
 
 MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleCNN": models_ner.SimpleCNN,
@@ -65,6 +66,7 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM256Depth2Dropout02": models_ner.SimpleLSTM256Depth2Dropout02,
                     "SimpleLSTM256Depth2Dropout02RNNDropout02": models_ner.SimpleLSTM256Depth2Dropout02RNNDropout02,
                     "SimpleLSTM256Depth2Dropout05RNNDropout05": models_ner.SimpleLSTM256Depth2Dropout05RNNDropout05,
+                    "SimpleLSTM256Depth2BertEmbeddingsFrozen": models_ner.SimpleLSTM256Depth2BertEmbeddingsFrozen,
                     "SimpleLSTM256Depth3Dropout02": models_ner.SimpleLSTM256Depth3Dropout02,
                     "SimpleLSTM256BertEmbeddingsFrozen": models_ner.SimpleLSTM256BertEmbeddingsFrozen,
                     "SimpleLSTM512": models_ner.SimpleLSTM512}
