@@ -18,13 +18,14 @@ import logging
 import os
 import sys
 import torch
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from importlib import import_module
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 from seqeval.metrics import accuracy_score, f1_score, precision_score, recall_score
 from torch import nn
+import time
 
 import transformers
 from transformers import (
@@ -41,6 +42,7 @@ from transformers.trainer_utils import is_main_process
 from utils_ner import Split, TokenClassificationDataset, TokenClassificationTask
 
 import models_ner
+import thop
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +154,27 @@ class DataTrainingArguments:
             "help": "The number of train samples to produce logits for." 
         },
     )
+    
+def computeTime(model, inputs, device='cuda'):
+    if device == 'cuda':
+        model = model.cuda()
+        inputs = inputs.cuda()
+
+    model.eval()
+
+    i = 0
+    time_spent = []
+    while i < 100:
+        start_time = time.time()
+        with torch.no_grad():
+            _ = model(**inputs)
+
+        if device == 'cuda':
+            torch.cuda.synchronize()  # wait for cuda to finish (cuda is asynchronous!)
+        if i != 0:
+            time_spent.append(time.time() - start_time)
+        i += 1
+    return np.mean(time_spent)
 
 def main():
     # See all possible arguments in src/transformers/training_args.py
@@ -175,6 +198,8 @@ def main():
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty. Use --overwrite_output_dir to overcome."
         )
+    elif not os.path.exists(training_args.output_dir):
+        os.mkdir(training_args.output_dir)
 
     module = import_module("tasks")
     try:
@@ -262,9 +287,66 @@ def main():
         model.to(training_args.device)
         model_type = "custom"
 
-    num_model_params = pytorch_total_params = sum(p.numel() for p in model.parameters())
+    num_model_params = sum(p.numel() for p in model.parameters())
     
-    logger.info("Number of model parameters: %d", num_model_params)
+    # acquire data for macs measurement at inference
+    test_dataset = TokenClassificationDataset(
+            token_classification_task=token_classification_task,
+            data_dir=data_args.data_dir,
+            tokenizer=tokenizer,
+            labels=labels,
+            model_type=model_type,
+            max_seq_length=data_args.max_seq_length,
+            overwrite_cache=data_args.overwrite_cache,
+            mode=Split.test,
+        )
+
+    # create test data
+    model_test_input = asdict(test_dataset[0])
+    inputs_dict = {}
+    for key, val in model_test_input.items():
+        val_tensor = torch.LongTensor(val).unsqueeze(0)
+        if key == "label_ids":
+            inputs_dict["labels"] = val_tensor
+        else:
+            inputs_dict[key] = val_tensor
+    
+    def count_embedding_macs_training(embedding_dim, max_seq_length, batch_size):
+        # embedding_dim, one update (2?), per token in sequence
+        total_ops = embedding_dim
+
+        total_ops *= max_seq_length
+        total_ops *= batch_size
+
+        return int(total_ops) 
+    
+    # calculate model number of MACs at inference    
+    if not model_args.model_class == "BERT":
+        num_embedding_macs = count_embedding_macs_training(model.embedding.weight.shape[1], data_args.max_seq_length, 1)
+    else:
+        logger.info("Measuring parameters for BERT model. Will ignore embedding calculations.")
+        num_embedding_macs = 0
+        
+    thop_num_model_macs, thop_num_model_params = thop.profile(model, inputs=inputs_dict)
+    
+    # calculate model inference time
+    model_mean_100_inference_time = computeTime(model, inputs=inputs_dict, device='cpu')
+    
+    output_model_info_file = os.path.join(training_args.output_dir, "model_info.txt")
+    
+    with open(output_model_info_file, 'w') as f:
+        f.write("Model class: \t %s" %(model_args.model_class))
+        f.write('\n')
+        f.write("Number of model parameters: \t %d" %(num_model_params))
+        f.write('\n')
+        f.write("Number of model parameters (thop): \t %d" %(thop_num_model_params))
+        f.write('\n')
+        f.write("Number of MACs necessary for one example forward pass: \t %d" %(thop_num_model_macs))
+        f.write('\n')
+        f.write("Number of MACs necessary for one example embedding training pass: \t %d" %(num_embedding_macs))
+        f.write('\n')
+        f.write("Time necessary for one example forward pass (average of 100 runs): \t %.3f s" %(model_mean_100_inference_time))
+        f.write('\n')
     return
 
 
