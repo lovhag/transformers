@@ -249,20 +249,6 @@ def main():
         label2id={label: i for i, label in enumerate(labels)},
         cache_dir=model_args.cache_dir,
     )
-    config.max_seq_length = data_args.max_seq_length
-    config.pad_token_id = tokenizer.pad_token_id
-    config.device = training_args.device
-    
-    # pass BERT embeddings if should be loaded to model
-    config.bert_embeddings = None
-    if model_args.bert_embeddings_path:
-        config.bert_embeddings = torch.load(model_args.bert_embeddings_path)
-    
-    # setup kd params
-    config.kd_param = model_args.kd_param
-    config.loss_fct_kd = None
-    if config.kd_param > 0:
-        config.loss_fct_kd = LOSS_FCT_KD_DICT[model_args.loss_fct_kd]
 
     if model_args.model_class=="BERT":
         model = AutoModelForTokenClassification.from_pretrained(
@@ -273,6 +259,21 @@ def main():
         )
         model_type = config.model_type
     else:
+        config.max_seq_length = data_args.max_seq_length
+        config.pad_token_id = tokenizer.pad_token_id
+        config.device = training_args.device
+        
+        # pass BERT embeddings if should be loaded to model
+        config.bert_embeddings = None
+        if model_args.bert_embeddings_path:
+            config.bert_embeddings = torch.load(model_args.bert_embeddings_path)
+        
+        # setup kd params
+        config.kd_param = model_args.kd_param
+        config.loss_fct_kd = None
+        if config.kd_param > 0:
+            config.loss_fct_kd = LOSS_FCT_KD_DICT[model_args.loss_fct_kd]
+        
         model = MODEL_CLASS_DICT[model_args.model_class](config)
         if model_args.custom_model_state_dict_path:
             model.load_state_dict(torch.load(model_args.custom_model_state_dict_path))
@@ -280,7 +281,7 @@ def main():
         model_type = "custom" #used for dataset tokens
 
     # Get datasets
-    if config.kd_param > 0:
+    if model_args.kd_param > 0:
         DataSetClass = DATA_CLASS_DICT["KD"]
     else:
         DataSetClass = DATA_CLASS_DICT["default"]  
