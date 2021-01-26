@@ -93,15 +93,6 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
 
-def save_logits_to_file(file_path, logits):
-    with open(file_path, 'w') as f:
-        for batch_predictions in logits:
-            for word_predictions in batch_predictions:
-                f.write(' '.join([str(word_prediction) for word_prediction in word_predictions]))
-                f.write('\n')
-            f.write('\n')
-    return
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -225,6 +216,27 @@ def main():
                     preds_list[i].append(label_map[preds[i][j]])
 
         return preds_list, out_label_list
+    
+    def align_logits(predictions: np.ndarray, label_ids: np.ndarray) -> List[int]:
+        batch_size, seq_len, nbr_labels = predictions.shape
+
+        preds_list = [[] for _ in range(batch_size)]
+
+        for i in range(batch_size):
+            for j in range(seq_len):
+                if label_ids[i, j] != nn.CrossEntropyLoss().ignore_index:
+                    preds_list[i].append(predictions[i][j])
+
+        return preds_list
+
+    def save_logits_to_file(file_path, logits):
+        with open(file_path, 'w') as f:
+            for batch_predictions in logits:
+                for word_predictions in batch_predictions:
+                    f.write(' '.join([str(word_prediction) for word_prediction in word_predictions]))
+                    f.write('\n')
+                f.write('\n')
+        return
 
     def compute_metrics(p: EvalPrediction) -> Dict:
         preds_list, out_label_list = align_predictions(p.predictions, p.label_ids)
@@ -275,13 +287,21 @@ def main():
 
     predictions, label_ids, metrics = trainer.predict(train_dataset)
     
+    # Align predicitons with account to word pieces
+    preds_list, _ = align_predictions(predictions, label_ids)
+    
+    # Align logits with account to word pieces
+    logits_list = align_logits(predictions, label_ids)
+    
+    # Save raw logits predictions for words (not word pieces)
+    output_train_word_logits_file = os.path.join(training_args.output_dir, "train_word_logits.txt")
+    save_logits_to_file(output_train_word_logits_file, logits_list)
+    
     # save raw logits predictions
     output_train_logits_file = os.path.join(training_args.output_dir, "train_logits.txt")
     save_logits_to_file(output_train_logits_file, predictions)
-            
-    # save with NER tags
-    preds_list, _ = align_predictions(predictions, label_ids)
 
+    # save metrics for train results
     output_train_results_file = os.path.join(training_args.output_dir, "train_results.txt")
     if trainer.is_world_process_zero():
         with open(output_train_results_file, "w") as writer:
@@ -289,7 +309,7 @@ def main():
                 logger.info("  %s = %s", key, value)
                 writer.write("%s = %s\n" % (key, value))
 
-    # Save train predictions
+    # Save train label predictions for each word
     output_train_predictions_file = os.path.join(training_args.output_dir, "train_predictions.txt")
     if trainer.is_world_process_zero():
         with open(output_train_predictions_file, "w") as writer:
@@ -306,7 +326,7 @@ def main():
                 predicted_label_id = np.argmax(predictions[example_index][index])
                 writer.write(word_piece + " " + str(example.label_ids[index]) + " " + str(predicted_label_id) + "\n")
             writer.write("\n")
-
+    
     return results
 
 
