@@ -70,6 +70,8 @@ MODEL_CLASS_DICT = {"SimpleClassifier": models_ner.SimpleClassifier,
                     "SimpleLSTM256Depth2Dropout05RNNDropout05": models_ner.SimpleLSTM256Depth2Dropout05RNNDropout05,
                     "SimpleLSTM256Depth3Dropout02": models_ner.SimpleLSTM256Depth3Dropout02,
                     "SimpleLSTM256BertEmbeddingsFrozen": models_ner.SimpleLSTM256BertEmbeddingsFrozen,
+                    "SimpleLSTM256Depth2BertEmbeddingsFrozen": models_ner.SimpleLSTM256Depth2BertEmbeddingsFrozen,
+                    "SimpleLSTM256Depth2Dropout02RNNDropout02BertEmbeddingsFrozen": models_ner.SimpleLSTM256Depth2Dropout02RNNDropout02BertEmbeddingsFrozen,
                     "SimpleLSTM512": models_ner.SimpleLSTM512}
 
 @dataclass
@@ -345,7 +347,7 @@ def main():
         f.write('\n')
         f.write("Number of MACs necessary for one example embedding training pass: \t %d" %(num_embedding_macs))
         f.write('\n')
-        f.write("Time necessary for one example forward pass (average of 100 runs): \t %.3f s" %(model_mean_100_inference_time))
+        f.write("Time necessary for one example forward pass (average of 100 runs): \t %.6f s" %(model_mean_100_inference_time))
         f.write('\n')
     return
 
